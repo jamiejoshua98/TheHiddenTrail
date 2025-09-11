@@ -1,0 +1,55 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.324, 60.397] },
+      "properties": {
+        "name": "Bryggen",
+        "subtitle": "UNESCO World Heritage Site",
+        "photo": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Bryggen_Bergen.jpg",
+        "url": "https://en.wikipedia.org/wiki/Bryggen"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.325, 60.392] },
+      "properties": {
+        "name": "Fish Market",
+        "subtitle": "Seafood & local produce",
+        "photo": "https://upload.wikimedia.org/wikipedia/commons/f/f8/Fish_market_Bergen.jpg",
+        "url": "https://en.wikipedia.org/wiki/Fish_market_(Norway)"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.343, 60.391] },
+      "properties": {
+        "name": "Fløibanen Funicular",
+        "subtitle": "Ride up Mount Fløyen",
+        "photo": "https://upload.wikimedia.org/wikipedia/commons/1/17/Floibanen_Bergen.jpg",
+        "url": "https://floyen.no/en/"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.328, 60.389] },
+      "properties": {
+        "name": "Bergenhus Fortress",
+        "subtitle": "Historic medieval stronghold",
+        "photo": "https://upload.wikimedia.org/wikipedia/commons/4/4f/Bergenhus_fortress.jpg",
+        "url": "https://en.wikipedia.org/wiki/Bergenhus_fortress"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.322, 60.385] },
+      "properties": {
+        "name": "Grieg Hall",
+        "subtitle": "Concert hall named after Edvard Grieg",
+        "photo": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Grieg_Hallen.jpg",
+        "url": "https://en.wikipedia.org/wiki/Grieg_Hallen"
+      }
+    }
+  ]
+}
