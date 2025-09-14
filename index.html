@@ -12,68 +12,37 @@
 </head>
 <body>
 <div id="map"></div>
-
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 <script>
-  // 1) Paste your public token:
-  mapboxgl.accessToken = 'pk.eyJ1IjoidGhlaGlkZGVudHJhaWwiLCJhIjoiY21mazBhMWg2MGFvaDJrc2hxN3VnZWV4eCJ9.gTrki2mEVtBCoiZ2Io--aw';
+  // 1) Paste your NEW public token between the quotes:
+  mapboxgl.accessToken = 'pk.YOUR_NEW_PUBLIC_TOKEN_HERE';
 
-  // 2) If you just published your Studio style, keep ?fresh=true to bust cache
-  const STYLE_URL = 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz?fresh=true';
-
-  // Lock the pitch so zooming doesn't flatten the terrain perception
-  const LOCKED_PITCH = 60;
-  const LOCKED_BEARING = -20;
+  // 2) Use your Mapbox Studio style URL (quoted):
+  const styleUrl = 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz';
 
   const map = new mapboxgl.Map({
     container: 'map',
-    style: STYLE_URL,
-    center: [5.324, 60.397],   // Bergen
+    style: styleUrl,
+    center: [5.324, 60.397],  // Bergen
     zoom: 12,
-    pitch: LOCKED_PITCH,
-    bearing: LOCKED_BEARING,
-    antialias: true,
-    pitchWithRotate: false,    // prevent 2-finger gesture from changing pitch
-    dragRotate: false          // keep camera angle steady
+    pitch: 60,                // camera tilt so 3D is visible
+    bearing: -20,
+    antialias: true
   });
 
-  // Keep pitch locked even after user zooms with controls
-  map.on('zoomend', () => {
-    if (map.getPitch() !== LOCKED_PITCH) map.setPitch(LOCKED_PITCH);
-  });
+  map.on('load', () => {
+    // --- Terrain (for hills) ---
+    if (!map.getSource('mapbox-dem')) {
+      map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        tileSize: 512, maxzoom: 14
+      });
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.0 });
+    }
 
-  map.on('load', async () => {
-    // ---- True elevated terrain (hills/mountains) ----
-    map.addSource('mapbox-dem', {
-      type: 'raster-dem',
-      url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-      tileSize: 512,
-      maxzoom: 14
-    });
-    // Exaggeration 1.2–1.6 makes relief readable; set to 1.0 if you want natural
-    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.3 });
-
-    // Soft hillshade for extra relief
-    map.addLayer({
-      id: 'hillshade',
-      type: 'hillshade',
-      source: 'mapbox-dem',
-      paint: { 'hillshade-exaggeration': 0.5 }
-    });
-
-    // Sky looks better with pitched camera
-    map.addLayer({
-      id: 'sky',
-      type: 'sky',
-      paint: {
-        'sky-type': 'atmosphere',
-        'sky-atmosphere-sun': [0.0, 0.0],
-        'sky-atmosphere-sun-intensity': 12
-      }
-    });
-
-    // ---- 3D buildings (inserted beneath labels) ----
-    const firstLabel = map.getStyle().layers.find(
+    // --- 3D buildings (if your style doesn’t already include them) ---
+    const labelLayerId = map.getStyle().layers.find(
       l => l.type === 'symbol' && l.layout && l.layout['text-field']
     )?.id;
 
@@ -82,47 +51,27 @@
         id: '3d-buildings',
         source: 'composite',
         'source-layer': 'building',
+        filter: ['==', ['get', 'extrude'], 'true'],
         type: 'fill-extrusion',
         minzoom: 15,
-        filter: ['==', ['get', 'extrude'], 'true'],
         paint: {
           'fill-extrusion-color': '#bbb',
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': ['get', 'min_height'],
           'fill-extrusion-opacity': 0.6
         }
-      }, firstLabel);
+      }, labelLayerId);
     }
 
-    // ---- Load your points robustly ----
-    let data;
-    try {
-      const res = await fetch('places.geojson', { cache: 'no-store' });
-      data = await res.json();
-      if (!data || data.type !== 'FeatureCollection') throw new Error('Not a FeatureCollection');
-      if (!Array.isArray(data.features)) data.features = [];
-    } catch (e) {
-      // Fallback: one sample point so you always see something
-      data = {
-        type: 'FeatureCollection',
-        features: [{
-          type: 'Feature',
-          properties: { name: 'Sample point – check places.geojson path/format' },
-          geometry: { type: 'Point', coordinates: [5.3273, 60.3894] } // Byparken
-        }]
-      };
-      console.warn('Failed to load places.geojson. Using fallback point.', e);
-    }
-
+    // --- Your points (clustered) ---
     map.addSource('places', {
       type: 'geojson',
-      data,
+      data: 'places.geojson',     // keep this filename in the repo root
       cluster: true,
       clusterMaxZoom: 14,
       clusterRadius: 50
     });
 
-    // Clusters
     map.addLayer({
       id: 'clusters',
       type: 'circle',
@@ -134,39 +83,22 @@
       }
     });
 
-    // Cluster counts
     map.addLayer({
       id: 'cluster-count',
       type: 'symbol',
       source: 'places',
       filter: ['has', 'point_count'],
-      layout: {
-        'text-field': ['get', 'point_count_abbreviated'],
-        'text-size': 12
-      }
+      layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }
     });
 
-    // Big, clear points when not clustered
     map.addLayer({
       id: 'unclustered',
       type: 'circle',
       source: 'places',
       filter: ['!', ['has', 'point_count']],
-      paint: {
-        'circle-radius': [
-          'interpolate', ['linear'], ['zoom'],
-          10, 10,
-          12, 14,
-          14, 20,
-          16, 28
-        ],
-        'circle-color': '#ff4d4d',
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 2
-      }
+      paint: { 'circle-radius': 6, 'circle-color': '#ff4d4d' }
     });
 
-    // Interactions
     map.on('click', 'clusters', (e) => {
       const f = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })[0];
       map.getSource('places').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
@@ -179,22 +111,16 @@
       const p = f.properties || {};
       const html = `
         <div class="popup">
-          ${p.photo ? `<img src="${p.photo}"/>` : ''}
-          <strong>${p.name || 'Place'}</strong><br/>
-          ${p.subtitle || ''}<br/>
-          ${p.url ? `<a href="${p.url}" target="_blank">More info</a>` : ''}
+          ${p.photo ? `<img src="${p.photo}"/>` : ""}
+          <strong>${p.name || ''}</strong><br/>
+          ${p.subtitle || ""}<br/>
+          ${p.url ? `<a href="${p.url}" target="_blank">More info</a>` : ""}
         </div>`;
       new mapboxgl.Popup().setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
     });
   });
 
-  // Controls
   map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
-  map.addControl(new mapboxgl.GeolocateControl({
-    positionOptions: { enableHighAccuracy: true },
-    trackUserLocation: true,
-    showUserHeading: true
-  }));
 </script>
 </body>
 </html>
