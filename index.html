@@ -12,32 +12,36 @@
 </head>
 <body>
 <div id="map"></div>
+
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 <script>
-  // TODO: rotate/restrict this to your GitHub Pages domain in Mapbox dashboard
+  // TODO: rotate/restrict this token to your GitHub Pages URL in the Mapbox dashboard
   mapboxgl.accessToken = 'pk.eyJ1IjoidGhlaGlkZGVudHJhaWwiLCJhIjoiY21mazBhMWg2MGFvaDJrc2hxN3VnZWV4eCJ9.gTrki2mEVtBCoiZ2Io--aw';
+
+  // Use your own published style URL
+  const styleUrl = 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz';
 
   const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz',
-    center: [5.324, 60.397],   // Bergen
+    style: styleUrl + '?fresh=true',   // helps bypass cached revisions
+    center: [5.324, 60.397],           // Bergen
     zoom: 12,
-    pitch: 60,                 // show 3D by default
+    pitch: 60,                         // show 3D immediately
     bearing: -20,
     antialias: true
   });
 
   map.on('load', () => {
-    // --- Terrain (elevates hills/mountains) ---
+    // ---- Terrain: elevate hills/mountains (single source of truth here in code) ----
     map.addSource('mapbox-dem', {
       type: 'raster-dem',
       url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
       tileSize: 512,
       maxzoom: 14
     });
-    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.4 });
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.0 }); // try 1.4 for more relief
 
-    // Optional: hillshade for more relief contrast
+    // Optional: hillshade overlay for extra relief contrast
     map.addLayer({
       id: 'hillshade',
       type: 'hillshade',
@@ -45,7 +49,7 @@
       paint: { 'hillshade-exaggeration': 0.6 }
     });
 
-    // Optional: sky for pitched camera
+    // Optional: sky looks nice with a pitched camera
     map.addLayer({
       id: 'sky',
       type: 'sky',
@@ -56,10 +60,11 @@
       }
     });
 
-    // --- 3D buildings (if your style doesn’t already include them) ---
-    const labelLayerId = map.getStyle().layers.find(
+    // ---- 3D buildings (if your style doesn’t already include them) ----
+    const firstLabel = map.getStyle().layers.find(
       l => l.type === 'symbol' && l.layout && l.layout['text-field']
     )?.id;
+
     if (!map.getLayer('3d-buildings')) {
       map.addLayer({
         id: '3d-buildings',
@@ -74,13 +79,13 @@
           'fill-extrusion-base': ['get', 'min_height'],
           'fill-extrusion-opacity': 0.6
         }
-      }, labelLayerId);
+      }, firstLabel);
     }
 
-    // --- Your points (clustered) ---
+    // ---- Your points (clustered) ----
     map.addSource('places', {
       type: 'geojson',
-      data: 'places.geojson',
+      data: 'places.geojson',   // keep this file at the repo root
       cluster: true,
       clusterMaxZoom: 14,
       clusterRadius: 50
@@ -107,7 +112,7 @@
       layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }
     });
 
-    // --- Bigger unclustered points (circle version) ---
+    // **Large points** when not clustered (circle version that scales with zoom)
     map.addLayer({
       id: 'unclustered',
       type: 'circle',
@@ -116,10 +121,10 @@
       paint: {
         'circle-radius': [
           'interpolate', ['linear'], ['zoom'],
-          10, 8,   // smaller zoom
+          10, 8,
           12, 12,
           14, 18,
-          16, 26   // close-in zoom
+          16, 26
         ],
         'circle-color': '#ff4d4d',
         'circle-stroke-color': '#ffffff',
@@ -127,7 +132,7 @@
       }
     });
 
-    // (Optional) Use a big custom icon instead of circles:
+    // (Optional) If you want a custom icon instead of circles:
     // map.loadImage('img/pin@2x.png', (err, image) => {
     //   if (err) throw err;
     //   if (!map.hasImage('poi-pin')) map.addImage('poi-pin', image);
@@ -145,7 +150,7 @@
     //   });
     // });
 
-    // Interactions
+    // Click handlers
     map.on('click', 'clusters', (e) => {
       const f = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })[0];
       map.getSource('places').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
