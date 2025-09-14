@@ -14,86 +14,60 @@
 <div id="map"></div>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 <script>
-  // 1) Paste your NEW public token between the quotes:
+  // TODO: rotate/restrict this to your GitHub Pages domain in Mapbox dashboard
   mapboxgl.accessToken = 'pk.eyJ1IjoidGhlaGlkZGVudHJhaWwiLCJhIjoiY21mazBhMWg2MGFvaDJrc2hxN3VnZWV4eCJ9.gTrki2mEVtBCoiZ2Io--aw';
-
-  // 2) Use your Mapbox Studio style URL (quoted):
-  const styleUrl = 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz';
 
   const map = new mapboxgl.Map({
     container: 'map',
-    style: styleUrl,
-    center: [5.324, 60.397],  // Bergen
+    style: 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz',
+    center: [5.324, 60.397],   // Bergen
     zoom: 12,
-    pitch: 60,                // camera tilt so 3D is visible
+    pitch: 60,                 // show 3D by default
     bearing: -20,
     antialias: true
   });
 
   map.on('load', () => {
-    // --- Terrain (for hills) ---
-    if (!map.getSource('mapbox-dem')) {
-      map.addSource('mapbox-dem', {
-        type: 'raster-dem',
-        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        tileSize: 512, maxzoom: 14
-      });
-      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.0 });
-    }
+    // --- Terrain (elevates hills/mountains) ---
+    map.addSource('mapbox-dem', {
+      type: 'raster-dem',
+      url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+      tileSize: 512,
+      maxzoom: 14
+    });
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.4 });
 
-    // DEM source + Terrain (elevates the ground surface)
-    if (!map.getSource('mapbox-dem')) {
-      map.addSource('mapbox-dem', {
-        type: 'raster-dem',
-        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        tileSize: 512,
-        maxzoom: 14
-      });
-      // exaggeration 1.3–1.8 makes relief pop more
-      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.4 });
-    }
-
-    // Optional: hillshade overlay for more relief contrast
-    if (!map.getLayer('hillshade')) {
-      map.addLayer({
-        id: 'hillshade',
-        type: 'hillshade',
-        source: 'mapbox-dem',
-        layout: { visibility: 'visible' },
-        paint: { 'hillshade-exaggeration': 0.6 }
-      }, /* place before labels if you want */);
-    }
+    // Optional: hillshade for more relief contrast
+    map.addLayer({
+      id: 'hillshade',
+      type: 'hillshade',
+      source: 'mapbox-dem',
+      paint: { 'hillshade-exaggeration': 0.6 }
+    });
 
     // Optional: sky for pitched camera
-    if (!map.getLayer('sky')) {
-      map.addLayer({
-        id: 'sky',
-        type: 'sky',
-        paint: {
-          'sky-type': 'atmosphere',
-          'sky-atmosphere-sun': [0.0, 0.0],
-          'sky-atmosphere-sun-intensity': 15
-        }
-      });
-    }
-
-    // Ensure camera is pitched to see terrain
-    map.setPitch(60);
-    map.setBearing(-20);
+    map.addLayer({
+      id: 'sky',
+      type: 'sky',
+      paint: {
+        'sky-type': 'atmosphere',
+        'sky-atmosphere-sun': [0.0, 0.0],
+        'sky-atmosphere-sun-intensity': 15
+      }
+    });
 
     // --- 3D buildings (if your style doesn’t already include them) ---
     const labelLayerId = map.getStyle().layers.find(
       l => l.type === 'symbol' && l.layout && l.layout['text-field']
     )?.id;
-
     if (!map.getLayer('3d-buildings')) {
       map.addLayer({
         id: '3d-buildings',
         source: 'composite',
         'source-layer': 'building',
-        filter: ['==', ['get', 'extrude'], 'true'],
         type: 'fill-extrusion',
         minzoom: 15,
+        filter: ['==', ['get', 'extrude'], 'true'],
         paint: {
           'fill-extrusion-color': '#bbb',
           'fill-extrusion-height': ['get', 'height'],
@@ -106,12 +80,13 @@
     // --- Your points (clustered) ---
     map.addSource('places', {
       type: 'geojson',
-      data: 'places.geojson',     // keep this filename in the repo root
+      data: 'places.geojson',
       cluster: true,
       clusterMaxZoom: 14,
       clusterRadius: 50
     });
 
+    // Clusters
     map.addLayer({
       id: 'clusters',
       type: 'circle',
@@ -123,6 +98,7 @@
       }
     });
 
+    // Cluster counts
     map.addLayer({
       id: 'cluster-count',
       type: 'symbol',
@@ -131,14 +107,45 @@
       layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }
     });
 
+    // --- Bigger unclustered points (circle version) ---
     map.addLayer({
       id: 'unclustered',
       type: 'circle',
       source: 'places',
       filter: ['!', ['has', 'point_count']],
-      paint: { 'circle-radius': 6, 'circle-color': '#ff4d4d' }
+      paint: {
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          10, 8,   // smaller zoom
+          12, 12,
+          14, 18,
+          16, 26   // close-in zoom
+        ],
+        'circle-color': '#ff4d4d',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2
+      }
     });
 
+    // (Optional) Use a big custom icon instead of circles:
+    // map.loadImage('img/pin@2x.png', (err, image) => {
+    //   if (err) throw err;
+    //   if (!map.hasImage('poi-pin')) map.addImage('poi-pin', image);
+    //   map.addLayer({
+    //     id: 'unclustered',
+    //     type: 'symbol',
+    //     source: 'places',
+    //     filter: ['!', ['has', 'point_count']],
+    //     layout: {
+    //       'icon-image': 'poi-pin',
+    //       'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.35, 14, 0.5, 16, 0.7],
+    //       'icon-allow-overlap': true,
+    //       'icon-ignore-placement': true
+    //     }
+    //   });
+    // });
+
+    // Interactions
     map.on('click', 'clusters', (e) => {
       const f = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })[0];
       map.getSource('places').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
@@ -160,15 +167,13 @@
     });
   });
 
+  // UI controls
   map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
-
   map.addControl(new mapboxgl.GeolocateControl({
-  positionOptions: { enableHighAccuracy: true },
-  trackUserLocation: true,
-  showUserHeading: true
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showUserHeading: true
   }));
 </script>
 </body>
 </html>
-
-
