@@ -14,25 +14,64 @@
 <div id="map"></div>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
 <script>
-  mapboxgl.accessToken = pk.eyJ1IjoidGhlaGlkZGVudHJhaWwiLCJhIjoiY203ZXZtNGVsMGV4ZjJscjA1aWhzeHN0diJ9.A-57YvOR0CMEjIbxKCXkaw;
+  // 1) Paste your NEW public token between the quotes:
+  mapboxgl.accessToken = 'pk.YOUR_NEW_PUBLIC_TOKEN_HERE';
+
+  // 2) Use your Mapbox Studio style URL (quoted):
+  const styleUrl = 'mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz';
 
   const map = new mapboxgl.Map({
     container: 'map',
-    style: mapbox://styles/thehiddentrail/cmffmtxuk000801qyclwyh9tz,
-    center: [5.324, 60.397], // Bergen
-    zoom: 12
+    style: styleUrl,
+    center: [5.324, 60.397],  // Bergen
+    zoom: 12,
+    pitch: 60,                // camera tilt so 3D is visible
+    bearing: -20,
+    antialias: true
   });
 
   map.on('load', () => {
+    // --- Terrain (for hills) ---
+    if (!map.getSource('mapbox-dem')) {
+      map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        tileSize: 512, maxzoom: 14
+      });
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.0 });
+    }
+
+    // --- 3D buildings (if your style doesn’t already include them) ---
+    const labelLayerId = map.getStyle().layers.find(
+      l => l.type === 'symbol' && l.layout && l.layout['text-field']
+    )?.id;
+
+    if (!map.getLayer('3d-buildings')) {
+      map.addLayer({
+        id: '3d-buildings',
+        source: 'composite',
+        'source-layer': 'building',
+        filter: ['==', ['get', 'extrude'], 'true'],
+        type: 'fill-extrusion',
+        minzoom: 15,
+        paint: {
+          'fill-extrusion-color': '#bbb',
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['get', 'min_height'],
+          'fill-extrusion-opacity': 0.6
+        }
+      }, labelLayerId);
+    }
+
+    // --- Your points (clustered) ---
     map.addSource('places', {
       type: 'geojson',
-      data: 'places.geojson',
+      data: 'places.geojson',     // keep this filename in the repo root
       cluster: true,
       clusterMaxZoom: 14,
       clusterRadius: 50
     });
 
-    // Clustered circles
     map.addLayer({
       id: 'clusters',
       type: 'circle',
@@ -44,7 +83,6 @@
       }
     });
 
-    // Cluster labels
     map.addLayer({
       id: 'cluster-count',
       type: 'symbol',
@@ -53,7 +91,6 @@
       layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }
     });
 
-    // Individual points
     map.addLayer({
       id: 'unclustered',
       type: 'circle',
@@ -62,31 +99,28 @@
       paint: { 'circle-radius': 6, 'circle-color': '#ff4d4d' }
     });
 
-    // Popup on click
-    map.on('click', 'unclustered', (e) => {
-      const f = e.features[0].properties;
-      const html = `
-        <div class="popup">
-          ${f.photo ? `<img src="${f.photo}"/>` : ""}
-          <strong>${f.name}</strong><br/>
-          ${f.subtitle || ""}<br/>
-          ${f.url ? `<a href="${f.url}" target="_blank">More info</a>` : ""}
-        </div>`;
-      new mapboxgl.Popup().setLngLat(e.features[0].geometry.coordinates).setHTML(html).addTo(map);
-    });
-
-    // Expand clusters on click
     map.on('click', 'clusters', (e) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
-      const clusterId = features[0].properties.cluster_id;
-      map.getSource('places').getClusterExpansionZoom(clusterId, (err, zoom) => {
-        if (!err) {
-          map.easeTo({ center: features[0].geometry.coordinates, zoom });
-        }
+      const f = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })[0];
+      map.getSource('places').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
+        if (!err) map.easeTo({ center: f.geometry.coordinates, zoom });
       });
     });
+
+    map.on('click', 'unclustered', (e) => {
+      const f = e.features[0];
+      const p = f.properties || {};
+      const html = `
+        <div class="popup">
+          ${p.photo ? `<img src="${p.photo}"/>` : ""}
+          <strong>${p.name || ''}</strong><br/>
+          ${p.subtitle || ""}<br/>
+          ${p.url ? `<a href="${p.url}" target="_blank">More info</a>` : ""}
+        </div>`;
+      new mapboxgl.Popup().setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+    });
   });
+
+  map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
 </script>
 </body>
 </html>
-
